@@ -10,7 +10,7 @@ const screen = blessed.screen()
 
 const grid = new contrib.grid({ rows: 8, cols: 8, screen })
 
-const routeBars = grid.set(0, 4,4,4, contrib.bar, {
+const routeBars = grid.set(4,4,4,4, contrib.bar, {
   label: 'Route usage',
   barWidth: 3,
   barSpacing: 3,
@@ -20,15 +20,32 @@ const routeBars = grid.set(0, 4,4,4, contrib.bar, {
 
 const routeUsage = {}
 
-const memoryLines = grid.set(4,0,4,8, contrib.line, {
+const memoryLines = grid.set(0,4,2,4, contrib.line, {
   style:
     { line: "yellow", 
       text: "green", 
       baseline: "black"
     }, 
   showLegend: true, 
-  showNthLabel: 5,
-  label: 'Memory Usage'
+  label: 'Time'
+})
+
+const responseLineChart = grid.set(2,4,2,4, contrib.line, {
+  style:
+    { line: "yellow", 
+      text: "green", 
+      baseline: "black"
+    }, 
+  showLegend: true, 
+  label: 'Time'
+})
+
+const donuts = grid.set(4,0,3,3, contrib.donut, {
+  label: 'System Usage',
+  radius: 10,
+  arcWidth: 4,
+  yPadding: 2,
+  data: [{label:'heap used', percent:0}]  
 })
 
 const log = grid.set(0, 0, 4, 4, contrib.log, {
@@ -40,8 +57,11 @@ const log = grid.set(0, 0, 4, 4, contrib.log, {
 screen.on('resize', function () {
   log.emit('attach')
   memoryLines.emit('attach')
+  responseLineChart.emit('attach')
   routeBars.emit('attach')
+  donuts.emit('attach')
 })
+
 
 
 //screen.key(['escape', 'q', 'C-c'], function () {
@@ -71,12 +91,6 @@ function error (err, showHelp = false) {
   }
 }
 
-const heapData = {
-  title: 'heap used',
-  style: {line: 'yellow'},
-  x: [0],
-  y: [0]
-}
 const eventLoopData = {
   title: 'event loop',
   style: {line: 'red'},
@@ -84,15 +98,15 @@ const eventLoopData = {
   y: [0]
 }
 
-const rssBytesData = {
-  title: 'rss bytes',
+const responseTimeData = {
+  title: 'response ',
   style: {line: 'green'},
   x: [0],
-  y: ['0']
+  y: [0]
 }
 
-memoryLines.setData([heapData, eventLoopData, rssBytesData])
-
+memoryLines.setData([eventLoopData])
+responseLineChart.setData([responseTimeData])
 function formatTime(timestamp){
 // Create a new JavaScript Date object based on the timestamp
 // // multiplied by 1000 so that the argument is in milliseconds, not seconds.
@@ -109,20 +123,23 @@ function formatTime(timestamp){
   return formattedTime
 }
 
-function memoryUsageLines({time, heapUsed, rssBytes, eventLoopDelay }) {
-  if (heapUsed && rssBytes && eventLoopDelay) {
-    heapData.y.push(heapUsed)
-    heapData.x.push(formatTime(time))
+function memoryUsageLines({time, eventLoopDelay}) {
+  if (eventLoopDelay) {
     eventLoopData.y.push(eventLoopDelay)
     eventLoopData.x.push(formatTime(time))
-    rssBytesData.y.push(rssBytes)
-    rssBytesData.y.push(formatTime(time))
-    memoryLines.setData([heapData, eventLoopData, rssBytesData])
+    memoryLines.setData([eventLoopData])
     screen.render()
   }
 }
 
-
+function responseLine({time, responseTime}) {
+  if (responseTime) {
+    responseTimeData.y.push(responseTime)
+    responseTimeData.x.push(formatTime(time))
+    responseLineChart.setData([responseTimeData])
+    screen.render()
+  }
+}
 
 function updateRouteBars (l) {
   const line = JSON.parse(l)
@@ -144,14 +161,23 @@ function updateLogs(l) {
   }
 }
 
+function updateDonut({heapUsed, heapTotal}) {
+  if (!heapUsed, !heapTotal) return
+  const percent = parseInt(parseFloat(heapUsed/heapTotal) * 100)
+  donuts.setData([{percent, label: 'heap used', color: 'yellow'}])
+}
+
 async function processLines (l) {
   /**
    * This should simply update any parsers out there
    *
-   */
+   */           
+  responseLine(JSON.parse(l))
   memoryUsageLines(JSON.parse(l))
   updateRouteBars(l)
+  updateDonut(JSON.parse(l))
   updateLogs(l)
+  screen.render()
 }
 
 async function * chunksToLines (chunkIterable) {

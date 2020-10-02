@@ -15,6 +15,7 @@
     "minimist": "^1.2.5"
   },
   "devDependencies": {
+    "pino": "^6.6.1",
     "standard": "^14.3.4"
   }
 }
